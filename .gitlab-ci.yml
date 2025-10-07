@@ -9,7 +9,7 @@ variables:
   AWS_REGION: "eu-west-1"
   ECR_REGISTRY: "038547062468.dkr.ecr.$AWS_REGION.amazonaws.com"
   # Override in GitLab CI/CD variables if needed
-  ECR_REPOSITORY: "ergo-global-ai/ai-service"
+  ECR_REPOSITORY: "ergoglobal-ai"
   ECS_CLUSTER: "ergoglobal-ai"
   ECS_SERVICE: "ergoglobal-ai-service"
 
