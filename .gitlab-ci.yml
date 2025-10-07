@@ -6,12 +6,12 @@ variables:
   DOCKER_TLS_CERTDIR: ""
   DOCKER_DRIVER: overlay2
   IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
-  AWS_REGION: "$AWS_REGION"
-  ECR_REGISTRY: "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+  AWS_REGION: "eu-west-1"
+  ECR_REGISTRY: "038547062468.dkr.ecr.$AWS_REGION.amazonaws.com"
   # Override in GitLab CI/CD variables if needed
   ECR_REPOSITORY: "ergo-global-ai/ai-service"
-  ECS_CLUSTER: "${ECS_CLUSTER}"
-  ECS_SERVICE: "${ECS_SERVICE}"
+  ECS_CLUSTER: "ergoglobal-ai"
+  ECS_SERVICE: "ergoglobal-ai-service"
 
 build_and_push:
   stage: build
