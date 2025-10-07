@@ -1,0 +1,58 @@
+{
+  "family": "ergoglobal-ai-service",
+  "networkMode": "awsvpc",
+  "executionRoleArn": "arn:aws:iam::038547062468:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::038547062468:role/aiServiceTaskRole",
+  "cpu": "512",
+  "memory": "1024",
+  "requiresCompatibilities": ["FARGATE"],
+  "containerDefinitions": [
+    {
+      "name": "ai-service",
+      "image": "038547062468.dkr.ecr.eu-west-1.amazonaws.com/ergo-global-ai/ai-service:{{TAG}}",
+      "essential": true,
+      "environment": [
+        { "name": "ENV", "value": "production" },
+        { "name": "AWS_REGION", "value": "eu-west-1" }
+      ],
+      "secrets": [
+        {
+          "name": "API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:eu-west-1:038547062468:secret:ergoglobal-ai/app/production:API_KEY::"
+        },
+        {
+          "name": "ENV",
+          "valueFrom": "arn:aws:secretsmanager:eu-west-1:038547062468:secret:ergoglobal-ai/app/production:ENV::"
+        },
+        {
+          "name": "LLM_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:eu-west-1:038547062468:secret:ergoglobal-ai/app/production:LLM_API_KEY::"
+        },
+        {
+          "name": "DEFAULT_MAX_TOKENS",
+          "valueFrom": "arn:aws:secretsmanager:eu-west-1:038547062468:secret:ergoglobal-ai/app/production:DEFAULT_MAX_TOKENS::"
+        }
+      ],
+      "portMappings": [{ "containerPort": 8000, "protocol": "tcp" }],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/ergoglobal-ai-service",
+          "awslogs-region": "eu-west-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost:8000/api/v1/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 10
+      }
+    }
+  ],
+  "volumes": []
+}
