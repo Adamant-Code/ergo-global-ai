@@ -11,7 +11,7 @@ variables:
   # Override in GitLab CI/CD variables if needed
   ECR_REPOSITORY: "ergoglobal-ai"
   ECS_CLUSTER: "ergoglobal-ai"
-  ECS_SERVICE: "ergoglobal-ai-service"
+  ECS_SERVICE: "ergoglobal-ai"
 
 build_and_push:
   stage: build
@@ -72,7 +72,11 @@ deploy_ecs:
     - export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/gitlab-oidc-token
     - aws sts get-caller-identity
   script:
-    - sed -e "s|{{TAG}}|$IMAGE_TAG|g" build/ecs/.taskdef.json > build/ecs/taskdef.rendered.json
+    - mkdir -p build/ecs
+    - IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+    - jq --arg img "$IMAGE_URI" --arg region "$AWS_REGION" \
+      '.containerDefinitions[0].image=$img | .containerDefinitions[0].logConfiguration.options["awslogs-region"]=$region' \
+      build/ecs/.taskdef.json > build/ecs/taskdef.rendered.json
     - |
       LOG_GROUP=$(jq -r '.containerDefinitions[0].logConfiguration.options["awslogs-group"]' build/ecs/taskdef.rendered.json)
       if ! aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" | jq -e \
