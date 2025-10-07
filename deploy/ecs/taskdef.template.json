@@ -27,6 +27,10 @@
         {
           "name": "DEFAULT_MAX_TOKENS",
           "valueFrom": "arn:aws:secretsmanager:eu-west-1:038547062468:secret:ergoglobal-ai/app/production:DEFAULT_MAX_TOKENS::"
+        },
+        {
+          "name": "REDIS_URL",
+          "valueFrom": "arn:aws:secretsmanager:eu-west-1:038547062468:secret:ergoglobal-ai/app/production:REDIS_URL::"
         }
       ],
       "portMappings": [{ "containerPort": 8000, "protocol": "tcp" }],
