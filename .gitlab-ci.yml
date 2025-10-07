@@ -76,7 +76,7 @@ deploy_ecs:
     - IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
     - jq --arg img "$IMAGE_URI" --arg region "$AWS_REGION" \
       '.containerDefinitions[0].image=$img | .containerDefinitions[0].logConfiguration.options["awslogs-region"]=$region' \
-      build/ecs/.taskdef.json > build/ecs/taskdef.rendered.json
+      "$CI_PROJECT_DIR/build/ecs/.taskdef.json" > build/ecs/taskdef.rendered.json
     - |
       LOG_GROUP=$(jq -r '.containerDefinitions[0].logConfiguration.options["awslogs-group"]' build/ecs/taskdef.rendered.json)
       if ! aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" | jq -e \
