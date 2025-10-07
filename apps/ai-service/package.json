@@ -1,0 +1,17 @@
+{
+  "name": "ai-service",
+  "version": "1.0.0",
+  "description": "AI service for the monorepo template",
+  "main": "main.py",
+  "scripts": {
+    "dev": "echo 'AI service runs in Docker container. Use: docker-compose -f docker-compose.dev.yml up ai-service'",
+    "start": "echo 'AI service runs in Docker container. Use: docker-compose up ai-service'",
+    "test": "echo 'AI service testing runs in Docker container'",
+    "lint": "echo 'AI service linting runs in Docker container'",
+    "format": "echo 'AI service formatting runs in Docker container'"
+  },
+  "keywords": ["ai", "fastapi", "python"],
+  "author": "Adamant Code Team",
+  "dependencies": {},
+  "devDependencies": {}
+}

@@ -1,0 +1,36 @@
+paths:
+  /auth/revoke-token:
+    post:
+      summary: Revokes a specific refresh token when a refresh token is provided in the body of the request else it revokes all tokens for the user.
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+                  example: specific_token_to_revoke
+      responses:
+        204:
+          description: Token(s) revoked
+        401:
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      status:
+                        type: integer
+                        example: 401
+                      message:
+                        type: string
+                        example: Not authorized to revoke this token

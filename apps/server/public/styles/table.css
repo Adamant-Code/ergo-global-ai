@@ -1,0 +1,17 @@
+[data-css$="-list-table-wrapper"] {
+  overflow-x: auto !important;
+}
+
+[data-css$="-table-head"] {
+  background-color: rgb(0 123 244 / 24%) !important;
+}
+
+[data-css$="-logo"] {
+  padding-top: 2rem !important;
+  justify-content: flex-start !important;
+}
+
+[alt$="Template"] {
+  width: 100% !important;
+  max-width: 140px !important;
+}

@@ -1,0 +1,53 @@
+paths:
+  /health:
+    get:
+      summary: Check API health status
+      tags: [Health]
+      parameters:
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [short, full]
+          description: Response format (short or full details)
+          example: full
+      responses:
+        200:
+          description: Health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    example: 2025-04-11T12:00:00Z
+                  uptime:
+                    type: number
+                    example: 1234
+                  aiService:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: ok
+        500:
+          description: Server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      status:
+                        type: integer
+                        example: 400
+                      message:
+                        type: string
+                        example: Validation error
+                required: [error]

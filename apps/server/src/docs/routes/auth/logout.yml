@@ -1,0 +1,31 @@
+paths:
+  /auth/logout:
+    post:
+      summary: Invalidate current tokens
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        204:
+          description: Logged out
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: refreshToken=; HttpOnly; Max-Age=0
+        401:
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      status:
+                        type: integer
+                        example: 401
+                      message:
+                        type: string
+                        example: Invalid token

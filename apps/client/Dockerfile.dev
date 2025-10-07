@@ -1,0 +1,34 @@
+# Use Node.js 20 LTS for Next.js
+FROM node:20-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Copy monorepo root files for workspace resolution
+COPY package.json turbo.json package-lock.json ./
+
+# Set npm configurations for better network resilience
+RUN npm config set fetch-timeout 300000 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    npm config set fetch-retries 5
+
+# Copy shared packages and build them first
+COPY packages/requestResponse ./packages/requestResponse
+RUN npm install -w @request-response/types && npm run build -w @request-response/types
+
+# Copy client files
+COPY apps/client ./apps/client
+
+# Install dependencies
+WORKDIR /app/apps/client
+RUN npm install
+
+# Set environment variables for client
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Expose Next.js port
+EXPOSE 3000
+
+# Run Next.js development server
+CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]
