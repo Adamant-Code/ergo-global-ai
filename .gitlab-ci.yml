@@ -71,12 +71,13 @@ deploy_ecs:
     - export AWS_ROLE_ARN="$AWS_ROLE_ARN"
     - export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/gitlab-oidc-token
     - aws sts get-caller-identity
+    - cd "$CI_PROJECT_DIR"
   script:
     - mkdir -p deploy/ecs
     - IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
     - jq --arg img "$IMAGE_URI" --arg region "$AWS_REGION" \
       '.containerDefinitions[0].image=$img | .containerDefinitions[0].logConfiguration.options["awslogs-region"]=$region' \
-      "$CI_PROJECT_DIR/deploy/ecs/taskdef.template.json" > deploy/ecs/taskdef.rendered.json
+      deploy/ecs/taskdef.template.json > deploy/ecs/taskdef.rendered.json
     - |
       LOG_GROUP=$(jq -r '.containerDefinitions[0].logConfiguration.options["awslogs-group"]' deploy/ecs/taskdef.rendered.json)
       if ! aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" | jq -e \

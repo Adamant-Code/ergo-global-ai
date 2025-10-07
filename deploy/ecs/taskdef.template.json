@@ -1,5 +1,5 @@
 {
-  "family": "ergoglobal-ai-service",
+  "family": "ergoglobal-ai",
   "networkMode": "awsvpc",
   "executionRoleArn": "arn:aws:iam::038547062468:role/ecsTaskExecutionRole",
   "taskRoleArn": "arn:aws:iam::038547062468:role/aiServiceTaskRole",
@@ -37,7 +37,7 @@
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "/ecs/ergoglobal-ai-service",
+          "awslogs-group": "/ecs/ergoglobal-ai",
           "awslogs-region": "eu-west-1",
           "awslogs-stream-prefix": "ecs"
         }
