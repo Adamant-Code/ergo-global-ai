@@ -1,0 +1,71 @@
+stages:
+  - build
+  - deploy
+
+variables:
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_DRIVER: overlay2
+  IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
+  AWS_REGION: "$AWS_REGION"
+  ECR_REGISTRY: "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+  # Override in GitLab CI/CD variables if needed
+  ECR_REPOSITORY: "ergo-global-ai/ai-service"
+  ECS_CLUSTER: "${ECS_CLUSTER}"
+  ECS_SERVICE: "${ECS_SERVICE}"
+
+build_and_push:
+  stage: build
+  image: docker:24.0.5
+  services:
+    - name: docker:24.0.5-dind
+      command: ["--mtu=1460"]
+  before_script:
+    - apk add --no-cache python3 py3-pip jq bash curl
+    - pip install awscli
+    - aws --version
+    - aws configure set default.region "$AWS_REGION"
+    - aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" || aws ecr create-repository --repository-name "$ECR_REPOSITORY"
+    - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+  script:
+    - docker build -f apps/ai-service/Dockerfile -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
+    - docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+    - |
+      if [ "$CI_COMMIT_BRANCH" = "main" ]; then
+        docker tag "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+        docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+      fi
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+
+deploy_ecs:
+  stage: deploy
+  image: amazon/aws-cli:2.17.21
+  needs: ["build_and_push"]
+  before_script:
+    - yum install -y jq gettext >/dev/null 2>&1 || true
+    - aws --version
+    - aws configure set default.region "$AWS_REGION"
+    - |
+      if ! aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" | jq -e \
+        ".logGroups[] | select(.logGroupName == \"$LOG_GROUP\")" >/dev/null 2>&1; then
+        aws logs create-log-group --log-group-name "$LOG_GROUP"
+      fi
+  script:
+    - sed "s/__TAG__/$IMAGE_TAG/" build/ecs/.taskdef.json > build/ecs/taskdef.rendered.json
+    - |
+      LOG_GROUP=$(jq -r '.containerDefinitions[0].logConfiguration.options["awslogs-group"]' build/ecs/taskdef.rendered.json)
+      if ! aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" | jq -e \
+        ".logGroups[] | select(.logGroupName == \"$LOG_GROUP\")" >/dev/null 2>&1; then
+        aws logs create-log-group --log-group-name "$LOG_GROUP"
+      fi
+    - |
+      TASK_DEF_ARN=$(aws ecs register-task-definition \
+        --cli-input-json file://build/ecs/taskdef.rendered.json \
+        | jq -r '.taskDefinition.taskDefinitionArn')
+      echo "Registered task definition: $TASK_DEF_ARN"
+    - aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" --task-definition "$TASK_DEF_ARN"
+    - aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
+  environment:
+    name: production
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
