@@ -21,10 +21,6 @@
           "valueFrom": "arn:aws:secretsmanager:eu-west-1:038547062468:secret:ergoglobal-ai/app/production:API_KEY::"
         },
         {
-          "name": "ENV",
-          "valueFrom": "arn:aws:secretsmanager:eu-west-1:038547062468:secret:ergoglobal-ai/app/production:ENV::"
-        },
-        {
           "name": "LLM_API_KEY",
           "valueFrom": "arn:aws:secretsmanager:eu-west-1:038547062468:secret:ergoglobal-ai/app/production:LLM_API_KEY::"
         },
