@@ -9,7 +9,14 @@ import logging
 from enum import Enum
 from typing import AsyncGenerator, Optional
 
+import boto3
+from botocore.exceptions import (
+    ClientError,
+    EndpointConnectionError,
+    ConnectTimeoutError,
+)
 from pydantic import BaseModel
+
 from src.llm.openai_client import OpenAIClient
 from src.llm.claude_client import ClaudeClient
 from src.llm.utils import merge_prompts_messages
@@ -226,3 +233,78 @@ async def generate_stream(request: LLMRequest) -> AsyncGenerator[str, None]:
             await asyncio.sleep(RETRY_BACKOFF**retries)
 
     raise Exception("Max retries exceeded for generate_stream")
+
+
+async def call_bedrock_generate(
+    query, bedrock_client, KNOWLEDGE_BASE_ID, MODEL_ARN, PROMPT, session_id=""
+):
+    """
+    Calls Bedrock's retrieve_and_generate with appropriate configuration and handles exceptions.
+    """
+    try:
+        logger.info(f"Received response generate request for: {query}")
+
+        bedrock_kwargs = {
+            "input": {"text": query},
+            "retrieveAndGenerateConfiguration": {
+                "type": "KNOWLEDGE_BASE",
+                "knowledgeBaseConfiguration": {
+                    "knowledgeBaseId": KNOWLEDGE_BASE_ID,
+                    "modelArn": MODEL_ARN,
+                    "retrievalConfiguration": {
+                        "vectorSearchConfiguration": {
+                            "numberOfResults": 5,
+                            "overrideSearchType": "HYBRID",
+                        }
+                    },
+                    "generationConfiguration": {
+                        "promptTemplate": {"textPromptTemplate": PROMPT},
+                        "inferenceConfig": {
+                            "textInferenceConfig": {
+                                "temperature": 0.0,
+                                "topP": 0.9,
+                                "maxTokens": 400,
+                            }
+                        },
+                        "performanceConfig": {"latency": "standard"},
+                    },
+                },
+            },
+        }
+
+        if session_id and session_id != "string":
+            bedrock_kwargs["sessionId"] = request_body.session_id
+
+        result = bedrock_client.retrieve_and_generate(**bedrock_kwargs)
+
+        return result
+
+    except bedrock_client.exceptions.AccessDeniedException as e:
+        logger.error(f"Bedrock auth error: {str(e)}")
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error_code": "upstream_auth_error",
+                "message": "Authentication failed with Bedrock",
+            },
+        )
+
+    except EndpointConnectionError as e:
+        logger.error(f"Bedrock connection error: {str(e)}")
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error_code": "upstream_auth_error",
+                "message": "Cannot connect to Bedrock service",
+            },
+        )
+
+    except ConnectTimeoutError as e:
+        logger.error(f"Bedrock timeout: {str(e)}")
+        raise HTTPException(
+            status_code=504,
+            detail={
+                "error_code": "upstream_timeout",
+                "message": "Bedrock request timed out",
+            },
+        )
