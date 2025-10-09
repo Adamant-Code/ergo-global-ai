@@ -59,9 +59,11 @@ async def query_knowledge_base(
                     },
                     "generationConfiguration": {
                         "promptTemplate": {
-                            "textPromptTemplate": getattr(
-                                request_body, "temperature", ERGOGLOBAL_AI_SYSTEM_PROMPT
-                            ),
+                            "textPromptTemplate": (
+                                request_body.system_prompt
+                                if request_body.system_prompt
+                                else ERGOGLOBAL_AI_SYSTEM_PROMPT
+                            )
                         },
                         "inferenceConfig": {
                             "textInferenceConfig": {
