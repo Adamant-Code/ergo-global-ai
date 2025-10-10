@@ -8,6 +8,8 @@ import asyncio
 import logging
 import json
 import re
+import json
+import re
 from enum import Enum
 from typing import AsyncGenerator, Optional
 
@@ -326,16 +328,20 @@ async def call_bedrock_generate_with_zero_shot_fallback(
     PROMPT,
 ):
 
-    retrieval_results = bedrock_agent_runtime_client.retrieve(
-        knowledgeBaseId=KNOWLEDGE_BASE_ID,
-        retrievalQuery={"text": query},
-        retrievalConfiguration={
-            "vectorSearchConfiguration": {
-                "numberOfResults": 5,
-                "overrideSearchType": "HYBRID",
+    try:
+        retrieval_results = bedrock_agent_runtime_client.retrieve(
+            knowledgeBaseId=KNOWLEDGE_BASE_ID,
+            retrievalQuery={"text": query},
+            retrievalConfiguration={
+                "vectorSearchConfiguration": {
+                    "numberOfResults": 5,
+                    "overrideSearchType": "HYBRID",
+                },
             },
-        },
-    )
+        )
+    except Exception as e:
+        logger.error(f"Retrieval failed: {e}")
+        retrieval_results = {}
 
     # filters chunks with score > 0.5
     retrieved_chunks = list(
@@ -385,16 +391,20 @@ async def call_bedrock_generate_with_zero_shot_fallback(
         """
 
     messages = [{"role": "user", "content": [{"text": prompt_text}]}]
-    result = bedrock_runtime_client.converse(
-        modelId=MODEL_ARN,
-        messages=messages,
-        inferenceConfig={
-            "temperature": 0.0,
-            "topP": 0.9,
-            "maxTokens": 400,
-        },
-        performanceConfig={"latency": "standard"},
-    )
+
+    try:
+        result = bedrock_runtime_client.converse(
+            modelId=MODEL_ARN,
+            messages=messages,
+            inferenceConfig={
+                "temperature": 0.0,
+                "topP": 0.9,
+                "maxTokens": 400,
+            },
+            performanceConfig={"latency": "standard"},
+        )
+    except Exception as e:
+        logger.error(f"Model call failed: {e}")
 
     output = (
         result.get("output", {})
