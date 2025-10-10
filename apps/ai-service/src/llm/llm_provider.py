@@ -345,12 +345,13 @@ async def call_bedrock_generate_with_zero_shot_fallback(
             retrieval_results = {}
 
         # filters chunks with score > 0.5
-        retrieved_chunks = list(
-            filter(
-                lambda chunk: chunk.get("score", 0) > 0.5,
-                retrieval_results.get("retrievalResults", []),
-            )
-        )
+        # retrieved_chunks = list(
+        #     filter(
+        #         lambda chunk: chunk.get("score", 0) > 0.5,
+        #         retrieval_results.get("retrievalResults", []),
+        #     )
+        # )
+        retrieved_chunks = retrieval_results.get("retrievalResults", [])
 
         if retrieved_chunks:
             context = "\n\n".join(
