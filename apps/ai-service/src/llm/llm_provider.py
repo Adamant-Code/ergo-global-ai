@@ -6,6 +6,8 @@ asynchronous operations, rate limiting, and error handling.
 
 import asyncio
 import logging
+import json
+import re
 from enum import Enum
 from typing import AsyncGenerator, Optional
 
@@ -308,3 +310,98 @@ async def call_bedrock_generate(
                 "message": "Bedrock request timed out",
             },
         )
+    except Exception as e:
+        logger.exception(
+            "Unexpected error occured when calling call_bedrock_generate", str(e)
+        )
+        raise
+
+
+async def call_bedrock_generate_with_zero_shot_fallback(
+    query,
+    bedrock_runtime_client,
+    bedrock_agent_runtime_client,
+    KNOWLEDGE_BASE_ID,
+    MODEL_ARN,
+    PROMPT,
+):
+
+    retrieval_results = bedrock_agent_runtime_client.retrieve(
+        knowledgeBaseId=KNOWLEDGE_BASE_ID,
+        retrievalQuery={"text": query},
+        retrievalConfiguration={
+            "vectorSearchConfiguration": {
+                "numberOfResults": 5,
+                "overrideSearchType": "HYBRID",
+            },
+        },
+    )
+
+    # filters chunks with score > 0.5
+    retrieved_chunks = list(
+        filter(
+            lambda chunk: chunk.get("score", 0) > 0.5,
+            retrieval_results.get("retrievalResults", []),
+        )
+    )
+
+    if retrieved_chunks:
+        context = "\n\n".join([chunk["content"]["text"] for chunk in retrieved_chunks])
+        logger.info(f"Retrieved {len(retrieved_chunks)} chunks for RAG path")
+        prompt_text = f"""
+        You are ErgoGlobal's virtual customer support assistant. Your role is to help customers by providing clear, accurate, and professional answers based only on the company’s official information provided in the context below.
+
+        Follow these rules:
+        - Base all responses strictly on the context provided. 
+        - If the information is not in the context, say politely: 
+        "I'm sorry, but I don't have that information right now. Let me connect you with a human support agent for further assistance."
+        - Maintain a polite, helpful, and empathetic tone.
+        - Use simple, customer-friendly language.
+        - Avoid internal jargon or speculation.
+        - When listing steps or instructions, use bullet points or numbered lists for clarity.
+
+        ---
+
+        Context:
+        {context}
+
+        ---
+
+        Customer Question:
+        {query}
+
+        ---
+
+        ErgoGlobal Answer:
+        """
+
+    else:
+        logger.info("No chunks retrieved. Proceeding zero-shot.")
+        prompt_text = f"""
+        You are an intelligent assistant. Answer the following question based on your knowledge:
+        {query}
+
+        Please give a clear and complete answer without citing or mentioning sources or URLs.
+        """
+
+    messages = [{"role": "user", "content": [{"text": prompt_text}]}]
+    result = bedrock_runtime_client.converse(
+        modelId=MODEL_ARN,
+        messages=messages,
+        inferenceConfig={
+            "temperature": 0.0,
+            "topP": 0.9,
+            "maxTokens": 400,
+        },
+        performanceConfig={"latency": "standard"},
+    )
+
+    output = (
+        result.get("output", {})
+        .get("message", {})
+        .get("content", [{}])[0]
+        .get("text", "")
+    )
+    # remove citation from the output
+    output = re.sub(r"\[\d+\]|\(source.*?\)", "", output)
+    return output
