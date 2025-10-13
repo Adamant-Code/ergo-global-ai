@@ -1,6 +1,7 @@
 # src/api/dependencies.py
 import logging
 import boto3
+import os
 from botocore.config import Config
 from typing import Generator
 from fastapi import Depends
@@ -36,11 +37,18 @@ def _create_bedrock_client(service_name: str):
     Internal helper to create a configured boto3 Bedrock client.
     """
     try:
+        aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
+        aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+        
         config = Config(
             region_name=REGION,
             retries={"max_attempts": 3, "mode": "standard"},
         )
-        client = boto3.client(service_name, config=config)
+        client = boto3.client(
+            service_name, 
+            config=config, 
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key)
         logger.debug(f"Successfully created Bedrock client for {service_name}")
         return client
     except Exception as e:

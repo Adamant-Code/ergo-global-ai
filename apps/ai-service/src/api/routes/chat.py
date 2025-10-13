@@ -207,28 +207,12 @@ async def query_knowledge_base(
             KNOWLEDGE_BASE_ID=KNOWLEDGE_BASE_ID,
             MODEL_ARN=MODEL_ARN,
             PROMPT=ERGOGLOBAL_AI_SYSTEM_PROMPT,
-    bedrock_runtime_client: boto3.client = Depends(get_bedrock_runtime_client),
-    bedrock_agent_runtime_client: boto3.client = Depends(
-        get_bedrock_agent_runtime_client
-    ),
-):
-
-    try:
-        result = await call_bedrock_generate_with_zero_shot_fallback(
-            query=request_body.message,
-            bedrock_runtime_client=bedrock_runtime_client,
-            bedrock_agent_runtime_client=bedrock_agent_runtime_client,
-            KNOWLEDGE_BASE_ID=KNOWLEDGE_BASE_ID,
-            MODEL_ARN=MODEL_ARN,
-            PROMPT=ERGOGLOBAL_AI_SYSTEM_PROMPT,
         )
 
         session_id = ""
 
         return ChatResponse(reply=result, session_id=session_id)
-        session_id = ""
-
-        return ChatResponse(reply=result, session_id=session_id)
+ 
     except Exception as e:
         logger.exception("Unexpected error processing completion request")
         raise HTTPException(status_code=500, detail=str(e))
