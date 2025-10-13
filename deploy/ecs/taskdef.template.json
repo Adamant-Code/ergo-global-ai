@@ -27,6 +27,18 @@
         {
           "name": "DEFAULT_MAX_TOKENS",
           "valueFrom": "arn:aws:secretsmanager:eu-west-1:038547062468:secret:ergoglobal-ai/app/production:DEFAULT_MAX_TOKENS::"
+        },
+        {
+          "name": "CHATWOOT_API_ACCESS_TOKEN",
+          "valueFrom": "arn:aws:secretsmanager:eu-west-1:038547062468:secret:ergoglobal-ai/app/production:CHATWOOT_API_ACCESS_TOKEN::"
+        },
+        {
+          "name": "AWS_ACCESS_KEY_ID",
+          "valueFrom": "arn:aws:secretsmanager:eu-west-1:038547062468:secret:ergoglobal-ai/app/production:AWS_ACCESS_KEY_ID::"
+        },
+        {
+          "name": "AWS_SECRET_ACCESS_KEY",
+          "valueFrom": "arn:aws:secretsmanager:eu-west-1:038547062468:secret:ergoglobal-ai/app/production:AWS_SECRET_ACCESS_KEY::"
         }
       ],
       "portMappings": [{ "containerPort": 8000, "protocol": "tcp" }],
