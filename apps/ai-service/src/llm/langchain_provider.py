@@ -1,12 +1,17 @@
 import boto3
 import re
 import logging
+import uuid
 from fastapi import HTTPException
 from langchain_core.prompts import PromptTemplate
 from langchain_community.chat_message_histories import ChatMessageHistory
 
 from src.prompt_engineering.templates import ERGOGLOBAL_AI_SYSTEM_PROMPT
-from src.api.dependencies import get_bedrock_agent_runtime_client, get_bedrock_runtime_client
+from src.api.dependencies import (
+    get_bedrock_agent_runtime_client,
+    get_bedrock_client,
+    get_bedrock_runtime_client,
+)
 from botocore.exceptions import (
     EndpointConnectionError,
     ConnectTimeoutError,
@@ -17,13 +22,14 @@ logger = logging.getLogger(__name__)
 KNOWLEDGE_BASE_ID = "ERJ0GKVEAO"
 MODEL_ARN = "arn:aws:bedrock:eu-west-1:038547062468:inference-profile/eu.anthropic.claude-3-5-sonnet-20240620-v1:0"
 
+
 class ConversationalRAGWithLangchain:
     def __init__(
         self,
         bedrock_runtime_client: boto3.client,
         bedrock_agent_runtime_client: boto3.client,
         knowledge_base_id: str,
-        model_id: str = "anthropic.claude-3-haiku-20240307-v1:0"
+        model_id: str = "anthropic.claude-3-haiku-20240307-v1:0",
     ) -> None:
         """
         Initializes a conversational RAG agent using AWS Bedrock.
@@ -46,14 +52,15 @@ class ConversationalRAGWithLangchain:
         response = self.bedrock_agent_runtime_client.retrieve(
             knowledgeBaseId=self.knowledge_base_id,
             retrievalQuery={"text": q},
-            retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": top_k}},
+            retrievalConfiguration={
+                "vectorSearchConfiguration": {"numberOfResults": top_k}
+            },
         )
 
         search_results = response.get("retrievalResults", [])
         context_chunks = [r["content"]["text"] for r in search_results]
         context_string = "\n".join(context_chunks)
         return context_string, search_results
-
 
     async def call_bedrock_generate_with_zero_shot_fallback(
         self, query: str, context: str, history: str
@@ -62,12 +69,26 @@ class ConversationalRAGWithLangchain:
         Performs RAG-based generation; falls back to zero-shot when retrieval fails.
         """
         try:
+            client = get_bedrock_client()
+            guardrail_response = client.create_guardrail(
+                name="contextual-grounding-guardrail-{}".format(str(uuid.uuid4())[:4]),
+                contextualGroundingPolicyConfig={
+                    "filtersConfig": [
+                        {"type": "GROUNDING", "threshold": 0.5},
+                        {"type": "RELEVANCE", "threshold": 0.5},
+                    ]
+                },
+                blockedInputMessaging="Sorry, I can not respond to this.",
+                blockedOutputsMessaging="Sorry, I can not respond to this.",
+            )
+            guardrailId = guardrail_response["guardrailId"]
+
             if context.strip():
                 ERGOGLOBAL_PROMPT_TEMPLATE = PromptTemplate(
                     input_variables=["context", "history", "query"],
                     template=ERGOGLOBAL_AI_SYSTEM_PROMPT,
                 )
-                
+
                 logger.info("Retrieved context found. Using RAG path.")
                 prompt_text = ERGOGLOBAL_PROMPT_TEMPLATE.format(
                     context=context, history=history, query=query
@@ -84,26 +105,55 @@ class ConversationalRAGWithLangchain:
                 Please give a clear and complete answer without citing or mentioning sources or URLs.
                 """
 
-            messages = [{"role": "user", "content": [{"text": prompt_text}]}]
+            guardrail_config = {
+                "guardrailIdentifier": guardrailId,
+                "guardrailVersion": "DRAFT",
+                "trace": "enabled",
+            }
+            inferenceConfig = {
+                "temperature": 0.0,
+                "topP": 0.9,
+                "maxTokens": 5000, # based on the discussion max token is set to be between 3 - 5 k
+            }
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"text": prompt_text}
+                        # {
+                        #     "guardContent": {
+                        #         "text": {
+                        #             "text": str(context),
+                        #             "qualifiers": ["grounding_source"],
+                        #         }
+                        #     }
+                        # },
+                        # {
+                        #     "guardContent": {
+                        #         "text": {
+                        #             "text": query,
+                        #             "qualifiers": ["query"],
+                        #         }
+                        #     }
+                        # },
+                    ],
+                }
+            ]
 
             result = self.bedrock_runtime_client.converse(
                 modelId=self.model_id,
                 messages=messages,
-                inferenceConfig={
-                    "temperature": 0.0,
-                    "topP": 0.9,
-                    "maxTokens": 400,
-                },
+                inferenceConfig=inferenceConfig,
+                guardrailConfig=guardrail_config,
                 performanceConfig={"latency": "standard"},
             )
-            
+
             output = (
                 result.get("output", {})
                 .get("message", {})
                 .get("content", [{}])[0]
                 .get("text", "")
             )
-            
 
             # Remove citations and cleanup
             output = re.sub(r"\[\d+\]|\(source.*?\)", "", output)
@@ -143,26 +193,23 @@ class ConversationalRAGWithLangchain:
                 "Unexpected error occurred when calling call_bedrock_generate_with_zero_shot_fallback",
                 str(e),
             )
-            raise HTTPException(
-                status_code=500,
-                detail="Something went wrong"
-            )
+            raise HTTPException(status_code=500, detail="Something went wrong")
 
-            
-            
     async def ai_respond(self, user_input: str):
         """Responds to user input using retrieved context and conversation memory."""
         if not user_input:
             raise ValueError("user_input cannot be empty.")
-       
+
         context_string, _ = self.retrieve_top_k_chunks(q=user_input)
-    
 
         # Format prompt with history and input
         formatted_history = "\n".join(
-            [f"Human: {m.content}" if m.type == "human" else f"AI: {m.content}" for m in self.memory.messages]
+            [
+                f"Human: {m.content}" if m.type == "human" else f"AI: {m.content}"
+                for m in self.memory.messages
+            ]
         )
-        
+
         ai_output = await self.call_bedrock_generate_with_zero_shot_fallback(
             query=user_input,
             context=context_string,
@@ -172,12 +219,13 @@ class ConversationalRAGWithLangchain:
         # Store messages
         self.memory.add_user_message(user_input)
         self.memory.add_ai_message(ai_output)
-        
+
         return ai_output
 
+
 rag = ConversationalRAGWithLangchain(
-        bedrock_runtime_client=get_bedrock_runtime_client(),
-        bedrock_agent_runtime_client=get_bedrock_agent_runtime_client(), 
-        knowledge_base_id=KNOWLEDGE_BASE_ID, 
-        model_id=MODEL_ARN
-    )
+    bedrock_runtime_client=get_bedrock_runtime_client(),
+    bedrock_agent_runtime_client=get_bedrock_agent_runtime_client(),
+    knowledge_base_id=KNOWLEDGE_BASE_ID,
+    model_id=MODEL_ARN,
+)
