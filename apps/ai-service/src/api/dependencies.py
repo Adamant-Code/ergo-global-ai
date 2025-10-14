@@ -68,3 +68,10 @@ def get_bedrock_agent_runtime_client():
     Returns a Bedrock Agent Runtime client for retrieval from a Knowledge Base
     """
     return _create_bedrock_client("bedrock-agent-runtime")
+
+
+def get_bedrock_client():
+    """
+    Returns a Bedrock client
+    """
+    return _create_bedrock_client("bedrock")
