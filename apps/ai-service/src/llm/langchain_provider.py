@@ -253,6 +253,7 @@ class ConversationalRAGWithLangchain:
             raise HTTPException(
                 status_code=504,
                 detail={
+                    "fallback": "timeout",
                     "error_code": "upstream_timeout",
                     "message": "Bedrock request timed out",
                 },
@@ -262,7 +263,10 @@ class ConversationalRAGWithLangchain:
                 "Unexpected error occurred when calling call_bedrock_generate_with_zero_shot_fallback",
                 str(e),
             )
-            raise HTTPException(status_code=500, detail="Something went wrong")
+            raise HTTPException(
+                status_code=503,
+                detail={"fallback": "temporary_unavailable", "error": "upstream_error"},
+            )
 
     async def ai_respond(
         self, user_input: str, account_id: str = "", conversation_id: str = ""
