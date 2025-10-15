@@ -7,6 +7,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_community.chat_message_histories import ChatMessageHistory
 
 from src.prompt_engineering.templates import ERGOGLOBAL_AI_SYSTEM_PROMPT
+from src.tools.shipment import shipment_status_tool
 from src.api.dependencies import (
     get_bedrock_agent_runtime_client,
     get_bedrock_client,
@@ -113,7 +114,7 @@ class ConversationalRAGWithLangchain:
             inferenceConfig = {
                 "temperature": 0.0,
                 "topP": 0.9,
-                "maxTokens": 5000, # based on the discussion max token is set to be between 3 - 5 k
+                "maxTokens": 5000,  # based on the discussion max token is set to be between 3 - 5 k
             }
             messages = [
                 {
@@ -140,13 +141,26 @@ class ConversationalRAGWithLangchain:
                 }
             ]
 
+            tools = [shipment_status_tool]
+
             result = self.bedrock_runtime_client.converse(
                 modelId=self.model_id,
                 messages=messages,
                 inferenceConfig=inferenceConfig,
                 guardrailConfig=guardrail_config,
                 performanceConfig={"latency": "standard"},
+                toolConfig={"tools": tools, "toolChoice": {"auto": {}}},
             )
+
+            tool_call = output.get("toolUse", None)
+            print("=================")
+            print("------------------")
+            print(tool_call)
+            print("------------------")
+            print("------------------")
+            print("------------------")
+            print("------------------")
+            print("------------------")
 
             output = (
                 result.get("output", {})
