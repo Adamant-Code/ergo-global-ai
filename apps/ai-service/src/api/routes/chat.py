@@ -66,7 +66,7 @@ async def chatwoot_webhook(
     except KeyError:
         raise HTTPException(status_code=400, detail={"error_code": "invalid_payload"})
 
-    result = await rag.ai_respond(user_input=query)
+    result = await rag.ai_respond(user_input=query, account_id="", conversation_id="")
 
     if not result:
         result = "Sorry, I'm having an issue at the moment. Please try again shortly."

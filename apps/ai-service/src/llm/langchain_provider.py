@@ -1,3 +1,4 @@
+import json
 import boto3
 import re
 import logging
@@ -5,7 +6,7 @@ import uuid
 from fastapi import HTTPException
 from langchain_core.prompts import PromptTemplate
 from langchain_community.chat_message_histories import ChatMessageHistory
-
+from src.llm.tools import ToolsList
 from src.prompt_engineering.templates import ERGOGLOBAL_AI_SYSTEM_PROMPT
 from src.api.dependencies import (
     get_bedrock_agent_runtime_client,
@@ -30,6 +31,8 @@ class ConversationalRAGWithLangchain:
         bedrock_agent_runtime_client: boto3.client,
         knowledge_base_id: str,
         model_id: str = "anthropic.claude-3-haiku-20240307-v1:0",
+        account_id: str = "",
+        conversation_id: str = "",
     ) -> None:
         """
         Initializes a conversational RAG agent using AWS Bedrock.
@@ -44,6 +47,8 @@ class ConversationalRAGWithLangchain:
         self.bedrock_runtime_client = bedrock_runtime_client
         self.bedrock_agent_runtime_client = bedrock_agent_runtime_client
         self.knowledge_base_id = knowledge_base_id
+        self.account_id = account_id
+        self.conversation_id = conversation_id
         # Instantiate memory to keep conversation history
         self.memory = ChatMessageHistory()
 
@@ -91,14 +96,25 @@ class ConversationalRAGWithLangchain:
 
                 logger.info("Retrieved context found. Using RAG path.")
                 prompt_text = ERGOGLOBAL_PROMPT_TEMPLATE.format(
-                    context=context, history=history, query=query
+                    context=context,
+                    history=history,
+                    query=query,
+                    account_id=self.account_id,
+                    conversation_id=self.conversation_id,
                 )
             else:
                 logger.info("No context retrieved. Proceeding with zero-shot fallback.")
                 prompt_text = f"""
+                You’re provided with a tool that can offload a conversation to a human agent called offload_conversation_to_agent;
+                only use the tool if the conversation requires human involvement. You may call the tool multiple times in the same response if necessary.
+                Do not mention or reference the tool or the offloading process in your final answer.
+
+
                 You are an intelligent assistant. Answer the following question based on your knowledge:
                 {query}
-
+                {self.account_id}
+                {self.conversation_id}
+                
                 Previous conversation:
                 {history}
 
@@ -113,7 +129,7 @@ class ConversationalRAGWithLangchain:
             inferenceConfig = {
                 "temperature": 0.0,
                 "topP": 0.9,
-                "maxTokens": 5000, # based on the discussion max token is set to be between 3 - 5 k
+                "maxTokens": 5000,  # based on the discussion max token is set to be between 3 - 5 k
             }
             messages = [
                 {
@@ -140,13 +156,66 @@ class ConversationalRAGWithLangchain:
                 }
             ]
 
+            toolConfig = {
+                "tools": [
+                    tool.bedrock_schema
+                    for tool in ToolsList.__dict__.values()
+                    if hasattr(tool, "bedrock_schema")
+                ],
+                "toolChoice": {"auto": {}},
+            }
+
             result = self.bedrock_runtime_client.converse(
                 modelId=self.model_id,
                 messages=messages,
                 inferenceConfig=inferenceConfig,
                 guardrailConfig=guardrail_config,
                 performanceConfig={"latency": "standard"},
+                toolConfig=toolConfig,
             )
+
+            function_calling = [
+                c["toolUse"]
+                for c in result["output"]["message"]["content"]
+                if "toolUse" in c
+            ]
+            if function_calling:
+                messages = []
+                messages.append(result["output"]["message"])
+                tool_result_message = {"role": "user", "content": []}
+                for function in function_calling:
+                    print("Function calling - Calling tool...")
+                    tool_name = function["name"]
+                    tool_args = function["input"] or {}
+                    tool_class = ToolsList()
+                    tool_response = json.dumps(
+                        getattr(tool_class, tool_name)(**tool_args)
+                    )
+                    print("Function calling - Got tool response...")
+                    tool_result_message["content"].append(
+                        {
+                            "toolResult": {
+                                "toolUseId": function["toolUseId"],
+                                "content": [{"text": tool_response}],
+                            }
+                        }
+                    )
+                messages.append(tool_result_message)
+
+                tool_output = self.bedrock_runtime_client.converse(
+                    modelId=self.model_id,
+                    messages=messages,
+                    inferenceConfig=inferenceConfig,
+                    guardrailConfig=guardrail_config,
+                    performanceConfig={"latency": "standard"},
+                    toolConfig=toolConfig,
+                )
+                return (
+                    tool_output.get("output", {})
+                    .get("message", {})
+                    .get("content", [{}])[0]
+                    .get("text", "")
+                )
 
             output = (
                 result.get("output", {})
