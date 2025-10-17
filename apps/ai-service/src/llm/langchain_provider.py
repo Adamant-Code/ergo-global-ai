@@ -110,6 +110,7 @@ class ConversationalRAGWithLangchain:
                 only use the tool if the conversation requires human involvement. You may call the tool multiple times in the same response if necessary.
                 Do not mention or reference the tool or the offloading process in your final answer once offloading is successful say conversation is offloaded to agent our agents will contact you soon.
 
+                If the customer reports software issues (e.g., "can't log in," "page not loading," "persistent errors"), immediately classify it as a software/system issue and escalate to a human agent using the `offload_conversation_to_agent` tool.  
 
                 You are an intelligent assistant. Answer the following question based on your knowledge:
                 {query}
