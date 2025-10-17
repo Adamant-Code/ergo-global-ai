@@ -75,19 +75,19 @@ class ConversationalRAGWithLangchain:
         Performs RAG-based generation; falls back to zero-shot when retrieval fails.
         """
         try:
-            client = get_bedrock_client()
-            guardrail_response = client.create_guardrail(
-                name="contextual-grounding-guardrail-{}".format(str(uuid.uuid4())[:4]),
-                contextualGroundingPolicyConfig={
-                    "filtersConfig": [
-                        {"type": "GROUNDING", "threshold": 0.5},
-                        {"type": "RELEVANCE", "threshold": 0.5},
-                    ]
-                },
-                blockedInputMessaging="Sorry, I can not respond to this.",
-                blockedOutputsMessaging="Sorry, I can not respond to this.",
-            )
-            guardrailId = guardrail_response["guardrailId"]
+            # client = get_bedrock_client()
+            # guardrail_response = client.create_guardrail(
+            #     name="contextual-grounding-guardrail-{}".format(str(uuid.uuid4())[:4]),
+            #     contextualGroundingPolicyConfig={
+            #         "filtersConfig": [
+            #             {"type": "GROUNDING", "threshold": 0.5},
+            #             {"type": "RELEVANCE", "threshold": 0.5},
+            #         ]
+            #     },
+            #     blockedInputMessaging="Sorry, I can not respond to this.",
+            #     blockedOutputsMessaging="Sorry, I can not respond to this.",
+            # )
+            # guardrailId = guardrail_response["guardrailId"]
 
             if context.strip():
                 ERGOGLOBAL_PROMPT_TEMPLATE = PromptTemplate(
@@ -123,11 +123,11 @@ class ConversationalRAGWithLangchain:
                 Please give a clear and complete answer without citing or mentioning sources or URLs.
                 """
 
-            guardrail_config = {
-                "guardrailIdentifier": guardrailId,
-                "guardrailVersion": "DRAFT",
-                "trace": "enabled",
-            }
+            # guardrail_config = {
+            #     "guardrailIdentifier": guardrailId,
+            #     "guardrailVersion": "DRAFT",
+            #     "trace": "enabled",
+            # }
             inferenceConfig = {
                 "temperature": 0.0,
                 "topP": 0.9,
@@ -171,7 +171,7 @@ class ConversationalRAGWithLangchain:
                 modelId=self.model_id,
                 messages=messages,
                 inferenceConfig=inferenceConfig,
-                guardrailConfig=guardrail_config,
+                # guardrailConfig=guardrail_config,
                 performanceConfig={"latency": "standard"},
                 toolConfig=toolConfig,
             )
@@ -206,7 +206,7 @@ class ConversationalRAGWithLangchain:
                     modelId=self.model_id,
                     messages=messages,
                     inferenceConfig=inferenceConfig,
-                    guardrailConfig=guardrail_config,
+                    # guardrailConfig=guardrail_config,
                     performanceConfig={"latency": "standard"},
                     toolConfig=toolConfig,
                 )

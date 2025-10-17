@@ -36,11 +36,11 @@ async def chatwoot_webhook(
     request: Request
 ):
     try:
-        data = await request.json()
+        data = await request.json()        
     except Exception:
         raise HTTPException(status_code=400, detail={"error_code": "invalid_payload"})
 
-    if data.get("event") != "message_created" or data.get("conversation", {}).get("status", ""):
+    if data.get("event") != "message_created" or data.get("conversation", {}).get("status", "") == "open":
         return JSONResponse(content={"action": "no_op"}, status_code=200)
 
     try:
