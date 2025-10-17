@@ -31,8 +31,6 @@ class ConversationalRAGWithLangchain:
         bedrock_agent_runtime_client: boto3.client,
         knowledge_base_id: str,
         model_id: str = "anthropic.claude-3-haiku-20240307-v1:0",
-        account_id: str = "",
-        conversation_id: str = "",
     ) -> None:
         """
         Initializes a conversational RAG agent using AWS Bedrock.
@@ -47,8 +45,6 @@ class ConversationalRAGWithLangchain:
         self.bedrock_runtime_client = bedrock_runtime_client
         self.bedrock_agent_runtime_client = bedrock_agent_runtime_client
         self.knowledge_base_id = knowledge_base_id
-        self.account_id = account_id
-        self.conversation_id = conversation_id
         # Instantiate memory to keep conversation history
         self.memory = ChatMessageHistory()
 
@@ -68,7 +64,12 @@ class ConversationalRAGWithLangchain:
         return context_string, search_results
 
     async def call_bedrock_generate_with_zero_shot_fallback(
-        self, query: str, context: str, history: str
+        self,
+        query: str,
+        context: str,
+        history: str,
+        account_id: str = "",
+        conversation_id: str = "",
     ) -> str:
         """
         Performs RAG-based generation; falls back to zero-shot when retrieval fails.
@@ -99,21 +100,21 @@ class ConversationalRAGWithLangchain:
                     context=context,
                     history=history,
                     query=query,
-                    account_id=self.account_id,
-                    conversation_id=self.conversation_id,
+                    account_id=account_id,
+                    conversation_id=conversation_id,
                 )
             else:
                 logger.info("No context retrieved. Proceeding with zero-shot fallback.")
                 prompt_text = f"""
                 You’re provided with a tool that can offload a conversation to a human agent called offload_conversation_to_agent;
                 only use the tool if the conversation requires human involvement. You may call the tool multiple times in the same response if necessary.
-                Do not mention or reference the tool or the offloading process in your final answer.
+                Do not mention or reference the tool or the offloading process in your final answer once offloading is successful say conversation is offloaded to agent our agents will contact you soon.
 
 
                 You are an intelligent assistant. Answer the following question based on your knowledge:
                 {query}
-                {self.account_id}
-                {self.conversation_id}
+                {account_id}
+                {conversation_id}
                 
                 Previous conversation:
                 {history}
@@ -184,14 +185,12 @@ class ConversationalRAGWithLangchain:
                 messages.append(result["output"]["message"])
                 tool_result_message = {"role": "user", "content": []}
                 for function in function_calling:
-                    print("Function calling - Calling tool...")
                     tool_name = function["name"]
                     tool_args = function["input"] or {}
                     tool_class = ToolsList()
                     tool_response = json.dumps(
                         getattr(tool_class, tool_name)(**tool_args)
                     )
-                    print("Function calling - Got tool response...")
                     tool_result_message["content"].append(
                         {
                             "toolResult": {
@@ -264,7 +263,9 @@ class ConversationalRAGWithLangchain:
             )
             raise HTTPException(status_code=500, detail="Something went wrong")
 
-    async def ai_respond(self, user_input: str):
+    async def ai_respond(
+        self, user_input: str, account_id: str = "", conversation_id: str = ""
+    ):
         """Responds to user input using retrieved context and conversation memory."""
         if not user_input:
             raise ValueError("user_input cannot be empty.")
@@ -283,6 +284,8 @@ class ConversationalRAGWithLangchain:
             query=user_input,
             context=context_string,
             history=formatted_history,
+            account_id=account_id,
+            conversation_id=conversation_id,
         )
 
         # Store messages
