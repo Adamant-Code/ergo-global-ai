@@ -12,7 +12,8 @@ import json
 import re
 from enum import Enum
 from typing import AsyncGenerator, Optional
-
+from src.utils.constants import routes
+from src.api.dependencies import get_bedrock_client
 import boto3
 from botocore.exceptions import (
     ClientError,
@@ -455,3 +456,25 @@ async def call_bedrock_generate_with_zero_shot_fallback(
             str(e),
         )
         raise
+
+
+async def classify_route_key(query: str):
+    # Instead of route_key_mapping, ask the LLM
+    route_decision_prompt = f"""
+    Determine if the following user query matches a known route key. if you don't know it make sure to return unknown_route
+    Return a JSON object as described:
+    User query: "{query}"
+    Known route keys:{routes.keys()}   """
+
+    route_decision_result = await get_bedrock_client.converse(
+        modelId="arn:aws:bedrock:eu-west-1:038547062468:inference-profile/eu.anthropic.claude-3-5-sonnet-20240620-v1:0",
+        messages=[{"role": "user", "content": [{"text": route_decision_prompt}]}],
+        inferenceConfig={"temperature": 0.0, "maxTokens": 200},
+    )
+
+    return (
+        route_decision_result.get("output", {})
+        .get("message", {})
+        .get("content", [{}])[0]
+        .get("text", "")
+    )

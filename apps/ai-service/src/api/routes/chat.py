@@ -3,6 +3,7 @@ import os
 import logging
 import requests
 import requests
+from urllib.parse import urlparse
 
 # Third party imports
 from fastapi import APIRouter, HTTPException, Depends, Request
@@ -36,7 +37,7 @@ async def chatwoot_webhook(
     request: Request
 ):
     try:
-        data = await request.json()        
+        data = await request.json()       
     except Exception:
         raise HTTPException(status_code=400, detail={"error_code": "invalid_payload"})
 
@@ -44,8 +45,11 @@ async def chatwoot_webhook(
         return JSONResponse(content={"action": "no_op"}, status_code=200)
 
     try:
-        account_id = data["account"]["id"]
+        account_id = data.get("account", {}).get("id", "")
         messages = data["conversation"]["messages"]
+        referer_url = data.get("conversation",{}).get("additional_attributes", {}).get("referer", "")
+        parsed_url = urlparse(referer_url)
+        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
         if not messages:
             raise KeyError("No messages in payload")
 
@@ -66,7 +70,7 @@ async def chatwoot_webhook(
     except KeyError:
         raise HTTPException(status_code=400, detail={"error_code": "invalid_payload"})
 
-    result = await rag.ai_respond(user_input=query, account_id=account_id, conversation_id=conversation_id)
+    result = await rag.ai_respond(user_input=query, account_id=account_id, conversation_id=conversation_id, referer_url=base_url)
 
     if not result:
         result = "Sorry, I'm having an issue at the moment. Please try again shortly."
