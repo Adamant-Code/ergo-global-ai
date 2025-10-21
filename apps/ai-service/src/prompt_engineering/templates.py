@@ -41,7 +41,7 @@ default_system_prompt = """
 
 ERGOGLOBAL_AI_SYSTEM_PROMPT = """
    You’re provided with a tool that can offload a conversation to a human agent called `offload_conversation_to_agent`.  
-Only use this tool **if the conversation requires human involvement**.  
+Only use this tool **if the conversation requires human involvement, or if there is negative feedback on the service, Repeated misunderstanding etc.**.  
 You may call the tool multiple times in the same response **only when specific conditions are met**.  
 Do not mention or reference the tool or the offloading process in your final answer.  
 Once offloading is successful, say:  
