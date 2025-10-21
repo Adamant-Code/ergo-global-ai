@@ -1,3 +1,4 @@
+import json
 import boto3
 import re
 import logging
@@ -5,7 +6,7 @@ import uuid
 from fastapi import HTTPException
 from langchain_core.prompts import PromptTemplate
 from langchain_community.chat_message_histories import ChatMessageHistory
-
+from src.llm.tools import ToolsList
 from src.prompt_engineering.templates import ERGOGLOBAL_AI_SYSTEM_PROMPT
 from src.api.dependencies import (
     get_bedrock_agent_runtime_client,
@@ -63,25 +64,30 @@ class ConversationalRAGWithLangchain:
         return context_string, search_results
 
     async def call_bedrock_generate_with_zero_shot_fallback(
-        self, query: str, context: str, history: str
+        self,
+        query: str,
+        context: str,
+        history: str,
+        account_id: str = "",
+        conversation_id: str = "",
     ) -> str:
         """
         Performs RAG-based generation; falls back to zero-shot when retrieval fails.
         """
         try:
-            client = get_bedrock_client()
-            guardrail_response = client.create_guardrail(
-                name="contextual-grounding-guardrail-{}".format(str(uuid.uuid4())[:4]),
-                contextualGroundingPolicyConfig={
-                    "filtersConfig": [
-                        {"type": "GROUNDING", "threshold": 0.5},
-                        {"type": "RELEVANCE", "threshold": 0.5},
-                    ]
-                },
-                blockedInputMessaging="Sorry, I can not respond to this.",
-                blockedOutputsMessaging="Sorry, I can not respond to this.",
-            )
-            guardrailId = guardrail_response["guardrailId"]
+            # client = get_bedrock_client()
+            # guardrail_response = client.create_guardrail(
+            #     name="contextual-grounding-guardrail-{}".format(str(uuid.uuid4())[:4]),
+            #     contextualGroundingPolicyConfig={
+            #         "filtersConfig": [
+            #             {"type": "GROUNDING", "threshold": 0.5},
+            #             {"type": "RELEVANCE", "threshold": 0.5},
+            #         ]
+            #     },
+            #     blockedInputMessaging="Sorry, I can not respond to this.",
+            #     blockedOutputsMessaging="Sorry, I can not respond to this.",
+            # )
+            # guardrailId = guardrail_response["guardrailId"]
 
             if context.strip():
                 ERGOGLOBAL_PROMPT_TEMPLATE = PromptTemplate(
@@ -91,29 +97,41 @@ class ConversationalRAGWithLangchain:
 
                 logger.info("Retrieved context found. Using RAG path.")
                 prompt_text = ERGOGLOBAL_PROMPT_TEMPLATE.format(
-                    context=context, history=history, query=query
+                    context=context,
+                    history=history,
+                    query=query,
+                    account_id=account_id,
+                    conversation_id=conversation_id,
                 )
             else:
                 logger.info("No context retrieved. Proceeding with zero-shot fallback.")
                 prompt_text = f"""
+                You’re provided with a tool that can offload a conversation to a human agent called offload_conversation_to_agent;
+                only use the tool if the conversation requires human involvement. You may call the tool multiple times in the same response if necessary.
+                Do not mention or reference the tool or the offloading process in your final answer once offloading is successful say conversation is offloaded to agent our agents will contact you soon.
+
+                If the customer reports software issues (e.g., "can't log in," "page not loading," "persistent errors"), immediately classify it as a software/system issue and escalate to a human agent using the `offload_conversation_to_agent` tool.  
+
                 You are an intelligent assistant. Answer the following question based on your knowledge:
                 {query}
-
+                {account_id}
+                {conversation_id}
+                
                 Previous conversation:
                 {history}
 
                 Please give a clear and complete answer without citing or mentioning sources or URLs.
                 """
 
-            guardrail_config = {
-                "guardrailIdentifier": guardrailId,
-                "guardrailVersion": "DRAFT",
-                "trace": "enabled",
-            }
+            # guardrail_config = {
+            #     "guardrailIdentifier": guardrailId,
+            #     "guardrailVersion": "DRAFT",
+            #     "trace": "enabled",
+            # }
             inferenceConfig = {
                 "temperature": 0.0,
                 "topP": 0.9,
-                "maxTokens": 5000, # based on the discussion max token is set to be between 3 - 5 k
+                "maxTokens": 5000,  # based on the discussion max token is set to be between 3 - 5 k
             }
             messages = [
                 {
@@ -140,13 +158,64 @@ class ConversationalRAGWithLangchain:
                 }
             ]
 
+            toolConfig = {
+                "tools": [
+                    tool.bedrock_schema
+                    for tool in ToolsList.__dict__.values()
+                    if hasattr(tool, "bedrock_schema")
+                ],
+                "toolChoice": {"auto": {}},
+            }
+
             result = self.bedrock_runtime_client.converse(
                 modelId=self.model_id,
                 messages=messages,
                 inferenceConfig=inferenceConfig,
-                guardrailConfig=guardrail_config,
+                # guardrailConfig=guardrail_config,
                 performanceConfig={"latency": "standard"},
+                toolConfig=toolConfig,
             )
+
+            function_calling = [
+                c["toolUse"]
+                for c in result["output"]["message"]["content"]
+                if "toolUse" in c
+            ]
+            if function_calling:
+                messages = []
+                messages.append(result["output"]["message"])
+                tool_result_message = {"role": "user", "content": []}
+                for function in function_calling:
+                    tool_name = function["name"]
+                    tool_args = function["input"] or {}
+                    tool_class = ToolsList()
+                    tool_response = json.dumps(
+                        getattr(tool_class, tool_name)(**tool_args)
+                    )
+                    tool_result_message["content"].append(
+                        {
+                            "toolResult": {
+                                "toolUseId": function["toolUseId"],
+                                "content": [{"text": tool_response}],
+                            }
+                        }
+                    )
+                messages.append(tool_result_message)
+
+                tool_output = self.bedrock_runtime_client.converse(
+                    modelId=self.model_id,
+                    messages=messages,
+                    inferenceConfig=inferenceConfig,
+                    # guardrailConfig=guardrail_config,
+                    performanceConfig={"latency": "standard"},
+                    toolConfig=toolConfig,
+                )
+                return (
+                    tool_output.get("output", {})
+                    .get("message", {})
+                    .get("content", [{}])[0]
+                    .get("text", "")
+                )
 
             output = (
                 result.get("output", {})
@@ -195,7 +264,9 @@ class ConversationalRAGWithLangchain:
             )
             raise HTTPException(status_code=500, detail="Something went wrong")
 
-    async def ai_respond(self, user_input: str):
+    async def ai_respond(
+        self, user_input: str, account_id: str = "", conversation_id: str = ""
+    ):
         """Responds to user input using retrieved context and conversation memory."""
         if not user_input:
             raise ValueError("user_input cannot be empty.")
@@ -214,6 +285,8 @@ class ConversationalRAGWithLangchain:
             query=user_input,
             context=context_string,
             history=formatted_history,
+            account_id=account_id,
+            conversation_id=conversation_id,
         )
 
         # Store messages
