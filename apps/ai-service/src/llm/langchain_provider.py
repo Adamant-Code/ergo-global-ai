@@ -7,10 +7,10 @@ from fastapi import HTTPException
 from langchain_core.prompts import PromptTemplate
 from langchain_community.chat_message_histories import ChatMessageHistory
 from src.llm.tools import ToolsList
+from src.utils.constants import routes, tenant_base_urls_set
 from src.prompt_engineering.templates import ERGOGLOBAL_AI_SYSTEM_PROMPT
 from src.api.dependencies import (
     get_bedrock_agent_runtime_client,
-    get_bedrock_client,
     get_bedrock_runtime_client,
 )
 from botocore.exceptions import (
@@ -70,6 +70,7 @@ class ConversationalRAGWithLangchain:
         history: str,
         account_id: str = "",
         conversation_id: str = "",
+        referer_url: str = "",
     ) -> str:
         """
         Performs RAG-based generation; falls back to zero-shot when retrieval fails.
@@ -102,6 +103,8 @@ class ConversationalRAGWithLangchain:
                     query=query,
                     account_id=account_id,
                     conversation_id=conversation_id,
+                    referer_url=referer_url,
+                    route_keys=routes.keys(),
                 )
             else:
                 logger.info("No context retrieved. Proceeding with zero-shot fallback.")
@@ -110,12 +113,15 @@ class ConversationalRAGWithLangchain:
                 only use the tool if the conversation requires human involvement. You may call the tool multiple times in the same response if necessary.
                 Do not mention or reference the tool or the offloading process in your final answer once offloading is successful say conversation is offloaded to agent our agents will contact you soon.
 
+                If the query is about finding a link classify the query in to this keys {routes.keys()} if it can't be classified as unknown only
+
                 If the customer reports software issues (e.g., "can't log in," "page not loading," "persistent errors"), immediately classify it as a software/system issue and escalate to a human agent using the `offload_conversation_to_agent` tool.  
 
                 You are an intelligent assistant. Answer the following question based on your knowledge:
                 {query}
                 {account_id}
                 {conversation_id}
+                {referer_url}
                 
                 Previous conversation:
                 {history}
@@ -223,6 +229,11 @@ class ConversationalRAGWithLangchain:
                 .get("content", [{}])[0]
                 .get("text", "")
             )
+            
+            if output in routes.keys():
+                if output == "unknown_route" or referer_url not in tenant_base_urls_set:
+                    return "I'm sorry, but I couldn’t find a link for the page you requested."
+                return  f"You can access the requested page using the link below: {referer_url}{routes[output]}"
 
             # Remove citations and cleanup
             output = re.sub(r"\[\d+\]|\(source.*?\)", "", output)
@@ -269,7 +280,11 @@ class ConversationalRAGWithLangchain:
             )
 
     async def ai_respond(
-        self, user_input: str, account_id: str = "", conversation_id: str = ""
+        self,
+        user_input: str,
+        account_id: str = "",
+        conversation_id: str = "",
+        referer_url: str = "",
     ):
         """Responds to user input using retrieved context and conversation memory."""
         if not user_input:
@@ -291,6 +306,7 @@ class ConversationalRAGWithLangchain:
             history=formatted_history,
             account_id=account_id,
             conversation_id=conversation_id,
+            referer_url=referer_url,
         )
 
         # Store messages

@@ -5,6 +5,7 @@ import requests
 
 from src.utils.tools import tool
 from config.settings import settings
+from src.llm.llm_provider import classify_route_key
 
 BASE_URL = (
     "http://ergoglobal-chatwoot-alb-1278403382.eu-west-1.elb.amazonaws.com/api/v1"
